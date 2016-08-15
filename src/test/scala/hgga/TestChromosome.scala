@@ -7,16 +7,21 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
   */
 class TestChromosome extends FunSuite with BeforeAndAfter {
 
-  var empty: Chromosome = _
-  var filled: Chromosome = _
   val binList: List[Bin] = List(Bin(5.0, List(Item("e", 5))),
                                 Bin(5.0, List(Item("a", 1), Item("d", 4))),
                                 Bin(5.0, List(Item("c", 3), Item("b", 2))))
-
-  before {
-    empty = Chromosome(5.0, List())
-    filled = new Chromosome(5.0, binList)
-  }
+  val binList1234: List[Bin] = List(Bin(7.0, List(Item("1", 1), Item("2", 2), Item("4", 3))),
+                                    Bin(7.0, List(Item("3", 2), Item("5", 1), Item("6", 2))),
+                                    Bin(7.0, List(Item("7", 1), Item("8", 1), Item("9", 2))),
+                                    Bin(7.0, List(Item("10", 5))))
+  val binListABCD: List[Bin] = List(Bin(7.0, List(Item("10", 5), Item("1", 1))),
+                                    Bin(7.0, List(Item("6", 2), Item("5", 1), Item("9", 2))),
+                                    Bin(7.0, List(Item("3", 2), Item("2", 2))),
+                                    Bin(7.0, List(Item("8", 1), Item("7", 1), Item("4", 3))))
+  val empty = Chromosome(5.0, List())
+  val filled = new Chromosome(5.0, binList)
+  val chrom1234: Chromosome = new Chromosome(7.0, binList1234)
+  val chromABCD: Chromosome = new Chromosome(7.0, binListABCD)
 
   test("Empty chromosome has 0.0 fitness") {
     assert(empty.fitness === 0.0)
@@ -46,20 +51,32 @@ class TestChromosome extends FunSuite with BeforeAndAfter {
   }
 
   test("kataklinger's crossover example") {
-    val firstBinList = List(Bin(7.0, List(Item("1", 1), Item("2", 2), Item("4", 3))),
-                            Bin(7.0, List(Item("3", 2), Item("5", 1), Item("6", 2))),
-                            Bin(7.0, List(Item("7", 1), Item("8", 1), Item("9", 2))),
-                            Bin(7.0, List(Item("10", 5))))
-    val secondBinList = List(Bin(7.0, List(Item("10", 5), Item("1", 1))),
-                             Bin(7.0, List(Item("6", 2), Item("5", 1), Item("9", 2))),
-                             Bin(7.0, List(Item("3", 2), Item("2", 2))),
-                             Bin(7.0, List(Item("8", 1), Item("7", 1), Item("4", 3))))
-    val oneTwoThreeFour = new Chromosome(7.0, firstBinList)
-    val abcd = new Chromosome(7.0, secondBinList)
-    val slice1 = oneTwoThreeFour.binList.slice(1, 3)
-    val slice2 = abcd.binList.slice(1, 2)
-    val child1 = oneTwoThreeFour.splice(1, 3, slice2)
-    val child2 = abcd.splice(1, 3, slice1)
+    val slice1 = binList1234.slice(1, 3)
+    val slice2 = binListABCD.slice(1, 2)
+    val child1 = chrom1234.splice(slice2)
+    val child2 = chromABCD.splice(slice1)
+    assert(testChromosome(child1))
+    assert(testChromosome(child2))
+  }
+
+  test("test crossover with a zero-length splice") {
+    val splicePoint1 = (1, 1)
+    val splicePoint2 = (1, 2)
+    val slice1 = binList1234.slice(1, 1)
+    val slice2 = binListABCD.slice(1, 2)
+    val child1 = chrom1234.splice(slice2)
+    val child2 = chromABCD.splice(slice1)
+    assert(testChromosome(child1))
+    assert(testChromosome(child2))
+  }
+
+  test("test crossover at index 0") {
+    val splicePoint1 = (0, 1)
+    val splicePoint2 = (0, 2)
+    val slice1 = binList1234.slice(0, 1)
+    val slice2 = binListABCD.slice(0, 2)
+    val child1 = chrom1234.splice(slice2)
+    val child2 = chromABCD.splice(slice1)
     assert(testChromosome(child1))
     assert(testChromosome(child2))
   }
@@ -83,13 +100,21 @@ class TestChromosome extends FunSuite with BeforeAndAfter {
                        Bin(7.0, List(Item("9", 2), Item("8", 1), Item("7", 1), Item("4", 3))),
                        Bin(7.0, List(Item("2", 2))))
     val ch = new Chromosome(7.0, binList)
-    val newCh = ch.mutate(List(0, 3))
+    val newCh = ch.mutate(Set(0, 3))
     assert(testChromosome(newCh))
+
+    val newCh2 = ch.mutate(Set(1, 1))
+    assert(testChromosome(newCh2))
+
+    val oneBinList = List(Bin(7.0, List(Item("10", 5), Item("1", 1))))
+    val ch2 = new Chromosome(7.0, oneBinList)
+    val newCh3 = ch2.mutate(3)
+    assert(newCh3.items.toSet === oneBinList.flatMap(b => b.itemList).toSet)
   }
 
   private def testChromosome(ch: Chromosome): Boolean = {
     val expectedItemList = (1 to 10).map(i => Integer.toString(i))
-    val itemList: List[String] = ch.binList.flatMap(b => b.itemList).map(i => i.name)
+    val itemList: List[String] = ch.items.map(i => i.name)
     (itemList.size == expectedItemList.size) && (itemList.toSet == expectedItemList.toSet)
   }
 }

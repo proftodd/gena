@@ -14,6 +14,10 @@ class Chromosome (val binCapacity: Double, val binList: List[Bin]) {
 
   def FITNESS_POWER: Double = 2.0
 
+  def bins = binList.length
+
+  def items = binList.flatMap(b => b.itemList)
+
   def addItem(item: Item): Chromosome = {
     binList.find(b => b.remaining >= item.value) match {
       case Some(b) => {
@@ -46,27 +50,30 @@ class Chromosome (val binCapacity: Double, val binList: List[Bin]) {
   }
 
   def crossoverPoints(): (Int, Int) = {
-    val first = Random.nextInt(binList.size)
-    val second = Random.nextInt(binList.size)
+    val first = Chromosome.r.nextInt(binList.size)
+    val second = Chromosome.r.nextInt(binList.size)
     if (first <= second) (first, second)
     else (second, first)
   }
 
-  def splice(start: Int, end: Int, insert: List[Bin]): Chromosome = {
-    val newItems: List[Item] = insert.flatMap(b => b.itemList)
-    val binsWithDups = binsWithItems(newItems)
-    val unassignedItems = binsWithDups.flatMap(b => b.itemList) diff newItems
-    val leftBinList = binList.take(start) diff binsWithDups
-    val rightBinList = binList.takeRight(binList.length - end) diff binsWithDups
-    var c = new Chromosome(binCapacity, leftBinList ++ insert ++ rightBinList)
-    var displacedItems: List[Item] = List()
-    for (i <- unassignedItems) {
-      val (newCh, moreDisplacedItems) = c.replace(i)
-      c = newCh
-      displacedItems ++= moreDisplacedItems
+  def splice(insert: List[Bin]): Chromosome = {
+    if (insert.isEmpty) this
+    else {
+      val newItems: List[Item] = insert.flatMap(b => b.itemList)
+      val binsWithDups = binsWithItems(newItems)
+      val unassignedItems = binsWithDups.flatMap(b => b.itemList) diff newItems
+      def keptBins = binList diff binsWithDups
+      var c = new Chromosome(binCapacity, keptBins ++ insert)
+      var displacedItems: List[Item] = List()
+      for (i <- unassignedItems) {
+        val (newCh, moreDisplacedItems) = c.replace(i)
+        c = newCh
+        displacedItems ++= moreDisplacedItems
+      }
+      displacedItems = displacedItems.sortWith((i1, i2) => i1.value >= i2.value)
+      displacedItems.foreach(i => c = c.addItem(i))
+      c
     }
-    displacedItems.sortBy(i => i.value).foreach(i => c = c.addItem(i))
-    c
   }
 
   def replace(i: Item): (Chromosome, List[Item]) = {
@@ -90,17 +97,23 @@ class Chromosome (val binCapacity: Double, val binList: List[Bin]) {
   }
 
   def crossover(that: Chromosome): List[Chromosome] = {
+    if (this.bins == 0 || that.bins == 0) {
+      return List(this, that)
+    }
     val myCrossoverPoints = crossoverPoints()
     val itsCrossoverPoints = that.crossoverPoints()
     val mySlice = binList.slice(myCrossoverPoints._1, myCrossoverPoints._2)
     val itsSlice = that.binList.slice(itsCrossoverPoints._1, itsCrossoverPoints._2)
-    val child1 = splice(myCrossoverPoints._1, myCrossoverPoints._2, itsSlice)
-    val child2 = that.splice(itsCrossoverPoints._1, itsCrossoverPoints._2, mySlice)
+    val child1 = splice(itsSlice)
+    val child2 = that.splice(mySlice)
     List(child1, child2)
   }
 
-  def mutate(l: List[Int]): Chromosome = {
-    val deletedBins: List[Bin] = for {i <- l} yield binList.slice(i, i + 1).head
+  def mutate(posSet: Set[Int]): Chromosome = {
+    if (bins == 0) {
+      return this
+    }
+    val deletedBins: List[Bin] = (for {i <- posSet} yield binList.slice(i, i + 1).head).toList
     val keptBins = binList diff deletedBins
     var c: Chromosome = new Chromosome(binCapacity, keptBins)
     var displacedItems: List[Item] = List()
@@ -109,15 +122,31 @@ class Chromosome (val binCapacity: Double, val binList: List[Bin]) {
       c = newCh
       displacedItems ++= moreDisplacedItems
     }
-    displacedItems = displacedItems.sortBy(i => i.value)
+    displacedItems = displacedItems.sortWith((i1, i2) => i1.value >= i2.value)
     displacedItems.foreach(i => c = c.addItem(i))
     c
+  }
+
+  def mutate(i: Int): Chromosome = {
+    if (bins == 0) {
+      this
+    } else if (bins <= i) {
+      mutate((0 until bins).toSet)
+    } else {
+      val mutationList = scala.collection.mutable.HashSet[Int]()
+      while (mutationList.size < i) {
+        mutationList += Chromosome.r.nextInt(binList.size)
+      }
+      mutate(mutationList.toSet)
+    }
   }
 
   override def toString = "Chromosome: [" + binCapacity + ", " + binList.mkString("{", ";" , "}") + "]"
 }
 
 object Chromosome {
+
+  val r = new Random
 
   def apply(binCapacity: Double, itemList: List[Item]): Chromosome = itemList match {
     case Nil => new Chromosome(binCapacity, List())
